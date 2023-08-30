@@ -27,7 +27,7 @@ def parquetify(in_path: str, out_path: str) -> None:
         spark.read.options(**csv_options).csv(in_path).write.parquet(out_path)
 
 
-def get_opinions() -> DataFrame:
+def get_opinions(path: str) -> DataFrame:
     """
     Loads opinions from parquet file and cleans up columns
     """
@@ -55,7 +55,7 @@ def get_opinions() -> DataFrame:
     drop_cols.extend(text_col_priority)
 
     return (
-        spark.read.parquet("opinions.parquet")
+        spark.read.parquet(path)
         .alias("o")
         .withColumn("opinion_text", coalesce(*text_col_priority))
         .withColumn("opinion_text", regexp_replace("opinion_text", r"<.+?>", ""))
@@ -67,7 +67,7 @@ def get_opinions() -> DataFrame:
     )
 
 
-def get_opinion_clusters() -> DataFrame:
+def get_opinion_clusters(path: str) -> DataFrame:
     """
     Loads opinion-clusters from parquet file and cleans up columns
     """
@@ -84,7 +84,7 @@ def get_opinion_clusters() -> DataFrame:
     ]
 
     return (
-        spark.read.parquet("opinion-clusters.parquet")
+        spark.read.parquet(path)
         .alias("oc")
         .withColumn("date_filed", col("date_filed").cast(DateType()))
         .withColumn(
@@ -100,7 +100,7 @@ def get_opinion_clusters() -> DataFrame:
     )
 
 
-def get_citations() -> DataFrame:
+def get_citations(path: str) -> DataFrame:
     """
     Loads citations from parquet file and cleans up columns
     """
@@ -114,7 +114,7 @@ def get_citations() -> DataFrame:
     ]
 
     return (
-        spark.read.parquet("citations.parquet")
+        spark.read.parquet(path)
         .alias("c")
         .withColumn("citation_text", concat_ws(" ", "volume", "reporter", "page"))
         .withColumn("cluster_id", col("cluster_id").cast(IntegerType()))
@@ -161,7 +161,18 @@ def group(
     )
 
 
+def find_latest(directory: str, prefix: str, extension: str) -> str:
+    candidates = os.listdir(directory)
+    candidates = list(
+        filter(lambda x: x.startswith(prefix) and x.endswith(extension), candidates)
+    )
+    candidates.sort()
+    return candidates[-1]
+
+
 if __name__ == "__main__":
+    data_dir = "data/"
+
     spark = (
         SparkSession.builder.appName("courtlistener-export")
         .master("local[8]")  # todo
@@ -169,12 +180,21 @@ if __name__ == "__main__":
         .getOrCreate()
     )
 
-    parquetify(f"data/citations.csv.bz2", "citations.parquet")
-    parquetify(f"data/opinion-clusters.csv.bz2", "opinion-clusters.parquet")
-    parquetify(f"data/citations.csv.bz2", "citations.parquet")
+    latest_citations = data_dir + find_latest(data_dir, "citations", ".csv.bz2")
+    latest_citations_parquet = latest_citations.replace(".csv.bz2", ".parquet")
+    parquetify(latest_citations, latest_citations_parquet)
 
-    citations = get_citations()
-    opinions = get_opinions()
-    opinion_clusters = get_opinion_clusters()
+    latest_clusters = data_dir + find_latest("data", "opinion-clusters", ".bz2")
+    latest_clusters_parquet = latest_clusters.replace(".csv.bz2", ".parquet")
+    parquetify(latest_clusters, latest_clusters_parquet)
+
+    latest_opinions = find_latest("data", "opinions", ".bz2")
+    latest_opinions_parquet = latest_opinions.replace(".csv.bz2", ".parquet")
+    parquetify(latest_opinions, latest_opinions_parquet)
+
+    citations = get_citations(latest_citations_parquet)
+    opinions = get_opinions(latest_opinions_parquet)
+    opinion_clusters = get_opinion_clusters(latest_clusters_parquet)
+
     reparented = group(citations, opinions, opinion_clusters)
-    reparented.write.parquet("data/courtlistener.parquet")
+    reparented.write.parquet(data_dir + "courtlistener.parquet")
