@@ -184,11 +184,11 @@ if __name__ == "__main__":
     latest_citations_parquet = latest_citations.replace(".csv.bz2", ".parquet")
     parquetify(latest_citations, latest_citations_parquet)
 
-    latest_clusters = data_dir + find_latest("data", "opinion-clusters", ".bz2")
+    latest_clusters = data_dir + find_latest(data_dir, "opinion-clusters", ".bz2")
     latest_clusters_parquet = latest_clusters.replace(".csv.bz2", ".parquet")
     parquetify(latest_clusters, latest_clusters_parquet)
 
-    latest_opinions = find_latest("data", "opinions", ".bz2")
+    latest_opinions = data_dir + find_latest(data_dir, "opinions", ".bz2")
     latest_opinions_parquet = latest_opinions.replace(".csv.bz2", ".parquet")
     parquetify(latest_opinions, latest_opinions_parquet)
 
