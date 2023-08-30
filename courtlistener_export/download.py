@@ -37,15 +37,15 @@ if __name__ == "__main__":
     latest_opinions = latest(opinions)
     latest_opinion_clusters = latest(opinion_clusters)
 
-    def download(nickname: str, out_filename: str) -> None:
-        print(f"Downloading {out_filename}...")
-        with open(f"data/{nickname}.csv.bz2", "wb") as dl_file:
+    def download(filename: str) -> None:
+        print(f"Downloading {filename}...")
+        with open(f"data/{filename}", "wb") as dl_file:
             with requests.get(
-                f"{STORAGE_URL}/bulk-data/{out_filename}", stream=True
+                f"{STORAGE_URL}/bulk-data/{filename}", stream=True
             ) as dl_response:
                 for chunk in dl_response.iter_content(chunk_size=8192):
                     dl_file.write(chunk)
 
-    download("citations", latest_citations)
-    download("opinion-clusters", latest_opinion_clusters)
-    download("opinions", latest_opinions)
+    download(latest_citations)
+    download(latest_opinion_clusters)
+    download(latest_opinions)
