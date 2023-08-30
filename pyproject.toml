@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "courtlistener-export"
+version = "0.1.0"
+description = ""
+authors = ["Michael Della Bitta <mdellabitta@law.harvard.edu>"]
+readme = "README.md"
+packages = [{include = "courtlistener_export"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyspark = "^3.4.1"
+requests = "^2.31.0"
+xmltodict = "^0.13.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
