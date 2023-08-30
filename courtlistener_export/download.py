@@ -43,9 +43,9 @@ if __name__ == "__main__":
             with requests.get(
                 f"{STORAGE_URL}/bulk-data/{out_filename}", stream=True
             ) as dl_response:
-                for chunk in dl_response.iter_content():
+                for chunk in dl_response.iter_content(chunk_size=8192):
                     dl_file.write(chunk)
 
-    # download("citations", latest_citations)
-    # download("opinion-clusters", latest_opinion_clusters)
+    download("citations", latest_citations)
+    download("opinion-clusters", latest_opinion_clusters)
     download("opinions", latest_opinions)
