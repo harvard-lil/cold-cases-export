@@ -162,9 +162,7 @@ def group(
     )
 
 
-def find_latest(
-    spark: SparkSession, directory: str, prefix: str, extension: str
-) -> str:
+def find_latest(directory: str, prefix: str, extension: str) -> str:
     """
     Of the downloads in the directory given the prefix and extension,
     find the one that lexigraphically sorts last. This works because
