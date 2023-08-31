@@ -1,4 +1,5 @@
 import os
+import click
 from pyspark.sql import SparkSession, DataFrame, Row
 from pyspark.sql.types import IntegerType, DateType, ArrayType, StringType
 from pyspark.sql.functions import (
@@ -10,12 +11,9 @@ from pyspark.sql.functions import (
 )
 
 
-def parquetify(in_path: str, out_path: str) -> None:
+def parquetify(spark: SparkSession, in_path: str, out_path: str) -> None:
     """
     Conditionally converts a .csv.bz2 to parquet for faster processing and filtering.
-    :param in_path: path to .csv.bz2
-    :param out_path: name of output file
-    :return: None
     """
     csv_options = {
         "header": "true",
@@ -27,7 +25,7 @@ def parquetify(in_path: str, out_path: str) -> None:
         spark.read.options(**csv_options).csv(in_path).write.parquet(out_path)
 
 
-def get_opinions(path: str) -> DataFrame:
+def get_opinions(spark: SparkSession, path: str) -> DataFrame:
     """
     Loads opinions from parquet file and cleans up columns
     """
@@ -67,7 +65,7 @@ def get_opinions(path: str) -> DataFrame:
     )
 
 
-def get_opinion_clusters(path: str) -> DataFrame:
+def get_opinion_clusters(spark: SparkSession, path: str) -> DataFrame:
     """
     Loads opinion-clusters from parquet file and cleans up columns
     """
@@ -100,11 +98,11 @@ def get_opinion_clusters(path: str) -> DataFrame:
     )
 
 
-def get_citations(path: str) -> DataFrame:
+def get_citations(spark: SparkSession, path: str) -> DataFrame:
     """
     Loads citations from parquet file and cleans up columns
     """
-
+    print("Loading " + path)
     drop_cols = [
         "id",
         "volume",
@@ -123,7 +121,10 @@ def get_citations(path: str) -> DataFrame:
 
 
 def group(
-    citations: DataFrame, opinions: DataFrame, opinion_clusters: DataFrame
+    spark: SparkSession,
+    citations: DataFrame,
+    opinions: DataFrame,
+    opinion_clusters: DataFrame,
 ) -> DataFrame:
     """
     This groups the three datasets by cluster id and then merges them using
@@ -161,7 +162,14 @@ def group(
     )
 
 
-def find_latest(directory: str, prefix: str, extension: str) -> str:
+def find_latest(
+    spark: SparkSession, directory: str, prefix: str, extension: str
+) -> str:
+    """
+    Of the downloads in the directory given the prefix and extension,
+    find the one that lexigraphically sorts last. This works because
+    the data dumps have iso dates in the middle of them.
+    """
     candidates = os.listdir(directory)
     candidates = list(
         filter(lambda x: x.startswith(prefix) and x.endswith(extension), candidates)
@@ -170,31 +178,50 @@ def find_latest(directory: str, prefix: str, extension: str) -> str:
     return candidates[-1]
 
 
-if __name__ == "__main__":
-    data_dir = "data/"
-
+@click.command()
+@click.option(
+    "--master", default="local[*]", help="Spark master to use. Defaults to local[*]"
+)
+@click.option(
+    "--driver_memory", default="24g", help="Heap of Spark driver. Defaults to 24g."
+)
+@click.option("--executor_memory", default="24g", help="Heap of Spark executors")
+@click.option(
+    "--data_dir", default="data", help="Directory for data. Defaults to data/"
+)
+def run(master: str, driver_memory: str, executor_memory: str, data_dir: str) -> None:
     spark = (
         SparkSession.builder.appName("courtlistener-export")
-        .master("local[8]")  # todo
-        .config("spark.driver.memory", "28g")  # todo
+        .master(master)
+        .config("spark.driver.memory", driver_memory)
+        .config("spark.driver.memory", executor_memory)
         .getOrCreate()
     )
 
-    latest_citations = data_dir + find_latest(data_dir, "citations", ".csv.bz2")
+    if data_dir.endswith("/"):
+        data_dir = data_dir[0:-1]
+
+    print(data_dir)
+
+    latest_citations = data_dir + "/" + find_latest(data_dir, "citations", ".csv.bz2")
     latest_citations_parquet = latest_citations.replace(".csv.bz2", ".parquet")
-    parquetify(latest_citations, latest_citations_parquet)
+    parquetify(spark, latest_citations, latest_citations_parquet)
 
-    latest_clusters = data_dir + find_latest(data_dir, "opinion-clusters", ".bz2")
+    latest_clusters = data_dir + "/" + find_latest(data_dir, "opinion-clusters", ".bz2")
     latest_clusters_parquet = latest_clusters.replace(".csv.bz2", ".parquet")
-    parquetify(latest_clusters, latest_clusters_parquet)
+    parquetify(spark, latest_clusters, latest_clusters_parquet)
 
-    latest_opinions = data_dir + find_latest(data_dir, "opinions", ".bz2")
+    latest_opinions = data_dir + "/" + find_latest(data_dir, "opinions", ".bz2")
     latest_opinions_parquet = latest_opinions.replace(".csv.bz2", ".parquet")
-    parquetify(latest_opinions, latest_opinions_parquet)
+    parquetify(spark, latest_opinions, latest_opinions_parquet)
 
-    citations = get_citations(latest_citations_parquet)
-    opinions = get_opinions(latest_opinions_parquet)
-    opinion_clusters = get_opinion_clusters(latest_clusters_parquet)
+    citations = get_citations(spark, latest_citations_parquet)
+    opinions = get_opinions(spark, latest_opinions_parquet)
+    opinion_clusters = get_opinion_clusters(spark, latest_clusters_parquet)
 
-    reparented = group(citations, opinions, opinion_clusters)
+    reparented = group(spark, citations, opinions, opinion_clusters)
     reparented.write.parquet(data_dir + "courtlistener.parquet")
+
+
+if __name__ == "__main__":
+    run()

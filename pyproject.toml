@@ -11,6 +11,7 @@ python = "^3.11"
 pyspark = "^3.4.1"
 requests = "^2.31.0"
 xmltodict = "^0.13.0"
+click = "^8.1.7"
 
 
 [tool.poetry.group.dev.dependencies]
