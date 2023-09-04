@@ -121,7 +121,6 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
 
 
 def group(
-    spark: SparkSession,
     citations: DataFrame,
     opinions: DataFrame,
     opinion_clusters: DataFrame,
@@ -217,8 +216,10 @@ def run(master: str, driver_memory: str, executor_memory: str, data_dir: str) ->
     opinions = get_opinions(spark, latest_opinions_parquet)
     opinion_clusters = get_opinion_clusters(spark, latest_clusters_parquet)
 
-    reparented = group(spark, citations, opinions, opinion_clusters)
-    reparented.write.parquet(data_dir + "courtlistener.parquet")
+    reparented = group(citations, opinions, opinion_clusters)
+    reparented.write.parquet(data_dir + "/courtlistener.parquet")
+
+    spark.stop()
 
 
 if __name__ == "__main__":
