@@ -1,3 +1,4 @@
+import os
 import sys
 import requests
 import xmltodict
@@ -39,6 +40,12 @@ if __name__ == "__main__":
 
     def download(filename: str) -> None:
         print(f"Downloading {filename}...")
+        outfile = f"data/{filename}"
+
+        if os.path.exists(outfile):
+            print(f"{filename} already exists.")
+            return
+
         with open(f"data/{filename}", "wb") as dl_file:
             with requests.get(
                 f"{STORAGE_URL}/bulk-data/{filename}", stream=True
