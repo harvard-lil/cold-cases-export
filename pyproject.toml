@@ -12,6 +12,7 @@ pyspark = "^3.4.1"
 requests = "^2.31.0"
 xmltodict = "^0.13.0"
 click = "^8.1.7"
+psutil = "^5.9.5"
 
 
 [tool.poetry.group.dev.dependencies]
