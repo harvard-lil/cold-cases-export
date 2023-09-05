@@ -1,4 +1,6 @@
 import os
+import sys
+
 import click
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import IntegerType, DateType
@@ -100,7 +102,6 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
     """
     Loads citations from parquet file and cleans up columns
     """
-    print("Loading " + path)
     drop_cols = [
         "id",
         "volume",
@@ -155,25 +156,8 @@ def find_latest(directory: str, prefix: str, extension: str) -> str:
     return candidates[-1]
 
 
-@click.command()
-@click.option(
-    "--master", default="local[*]", help="Spark master to use. Defaults to local[*]"
-)
-@click.option(
-    "--driver_memory", default="24g", help="Heap of Spark driver. Defaults to 24g."
-)
-@click.option("--executor_memory", default="24g", help="Heap of Spark executors")
-@click.option(
-    "--data_dir", default="data", help="Directory for data. Defaults to data/"
-)
-def run(master: str, driver_memory: str, executor_memory: str, data_dir: str) -> None:
-    spark = (
-        SparkSession.builder.appName("courtlistener-export")
-        .master(master)
-        .config("spark.driver.memory", driver_memory)
-        .config("spark.driver.memory", executor_memory)
-        .getOrCreate()
-    )
+def run(data_dir: str) -> None:
+    spark = SparkSession.builder.appName("courtlistener-export").getOrCreate()
 
     if data_dir.endswith("/"):
         data_dir = data_dir[0:-1]
@@ -203,4 +187,4 @@ def run(master: str, driver_memory: str, executor_memory: str, data_dir: str) ->
 
 
 if __name__ == "__main__":
-    run()
+    run(sys.argv[1])
