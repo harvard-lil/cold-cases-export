@@ -1,13 +1,15 @@
 import os
 import click
-from pyspark.sql import SparkSession, DataFrame, Row
-from pyspark.sql.types import IntegerType, DateType, ArrayType, StringType
+from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import IntegerType, DateType
 from pyspark.sql.functions import (
     coalesce,
     when,
     col,
     regexp_replace,
     concat_ws,
+    collect_list,
+    struct,
 )
 
 
@@ -38,7 +40,6 @@ def get_opinions(spark: SparkSession, path: str) -> DataFrame:
         "xml_harvard",
         "html_anon_2020",
     ]
-
     drop_cols = [
         "date_created",
         "date_modified",
@@ -49,9 +50,7 @@ def get_opinions(spark: SparkSession, path: str) -> DataFrame:
         "author_id",
         "opinion_id",
     ]
-
     drop_cols.extend(text_col_priority)
-
     return (
         spark.read.parquet(path)
         .alias("o")
@@ -80,7 +79,6 @@ def get_opinion_clusters(spark: SparkSession, path: str) -> DataFrame:
         "procedural_history",
         "docket_id",  # todo join dockets?
     ]
-
     return (
         spark.read.parquet(path)
         .alias("oc")
@@ -110,7 +108,6 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
         "page",
         "type",  # might be needed. no current lookup table provided.
     ]
-
     return (
         spark.read.parquet(path)
         .alias("c")
@@ -131,34 +128,17 @@ def group(
     api, but I didn't get around to figuring it out.
     """
 
-    def reparent_opinions(row: Row) -> Row:
-        pair = row[1]
-        cluster = list(list(pair[0])[0][0])[0]
-        opinions = list(list(pair[0])[0][1])
-        citations = list(pair[1])
-        dict = cluster.asDict()
-        dict["opinions"] = opinions
-        dict["citations"] = citations
-        return Row(**dict)
-
-    citations_keyed = citations.rdd.map(lambda x: (x.cluster_id, x.citation_text))
-    opinions_keyed = opinions.rdd.map(lambda x: (x.cluster_id, x))
-
-    grouped = (
-        opinion_clusters.rdd.map(lambda x: (x.id, x))
-        .groupWith(opinions_keyed)
-        .groupWith(citations_keyed)
+    citations_arrays = citations.groupby(citations.cluster_id).agg(
+        collect_list(struct(*[col(c).alias(c) for c in citations.columns]))
     )
 
-    schema = opinion_clusters.schema
-    schema.add("opinions", ArrayType(opinions.schema))
-    schema.add("citations", ArrayType(StringType()))
-
-    return (
-        grouped.map(lambda x: reparent_opinions(x))
-        .toDF(schema)
-        .drop("opinions.cluster_id")
+    opinions_arrays = opinions.groupby(opinions.cluster_id).agg(
+        collect_list(struct(*[col(c).alias(c) for c in opinions.columns]))
     )
+
+    return opinion_clusters.join(
+        citations_arrays, opinion_clusters.id == citations_arrays.cluster_id, "left"
+    ).join(opinions_arrays, opinion_clusters.id == citations_arrays.cluster_id, "left")
 
 
 def find_latest(directory: str, prefix: str, extension: str) -> str:
