@@ -1,7 +1,6 @@
 import os
 import sys
 
-import click
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import IntegerType, DateType
 from pyspark.sql.functions import (
@@ -49,8 +48,6 @@ def get_opinions(spark: SparkSession, path: str) -> DataFrame:
         "sha1",
         "local_path",
         "extracted_by_ocr",
-        "author_id",
-        "opinion_id",
     ]
     drop_cols.extend(text_col_priority)
     return (
@@ -62,6 +59,8 @@ def get_opinions(spark: SparkSession, path: str) -> DataFrame:
         .withColumn("ocr", when(col("extracted_by_ocr") == "t", True).otherwise(False))
         .withColumn("per_curiam", when(col("per_curiam") == "t", True).otherwise(False))
         .withColumn("cluster_id", col("cluster_id").cast(IntegerType()))
+        .withColumn("author_id", col("author_id").cast(IntegerType()))
+        .withColumn("opinion_id", col("opinion_id").cast(IntegerType()))
         .drop(*drop_cols)
     )
 
@@ -79,7 +78,7 @@ def get_opinion_clusters(spark: SparkSession, path: str) -> DataFrame:
         "scdb_votes_minority",
         "source",
         "procedural_history",
-        "docket_id",  # todo join dockets?
+        "blocked",
     ]
     return (
         spark.read.parquet(path)
@@ -90,10 +89,11 @@ def get_opinion_clusters(spark: SparkSession, path: str) -> DataFrame:
             when(col("date_filed_is_approximate") == "t", True).otherwise(False),
         )
         .withColumn("date_blocked", col("date_blocked").cast(DateType()))
-        .withColumn("blocked", when(col("blocked") == "t", True).otherwise(False))
         .withColumn("citation_count", col("citation_count").cast(IntegerType()))
         .withColumn("summary", regexp_replace("summary", r"<.+?>", ""))
         .withColumn("id", col("id").cast(IntegerType()))
+        .withColumn("docket_id", col("docket_id").cast(IntegerType()))
+        .filter(col("blocked") == "t")
         .drop(*drop_cols)
     )
 
@@ -103,7 +103,6 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
     Loads citations from parquet file and cleans up columns
     """
     drop_cols = [
-        "id",
         "volume",
         "reporter",
         "page",
@@ -114,6 +113,7 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
         .alias("c")
         .withColumn("citation_text", concat_ws(" ", "volume", "reporter", "page"))
         .withColumn("cluster_id", col("cluster_id").cast(IntegerType()))
+        .withColumn("id", col("id").cast(IntegerType()))
         .drop(*drop_cols)
     )
 
