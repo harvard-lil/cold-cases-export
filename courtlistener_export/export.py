@@ -13,6 +13,8 @@ from pyspark.sql.functions import (
     struct,
 )
 
+REPARTITION_FACTOR = 32  # will split data this many times for parallelism
+
 
 def parquetify(spark: SparkSession, in_path: str, out_path: str) -> None:
     """
@@ -25,7 +27,9 @@ def parquetify(spark: SparkSession, in_path: str, out_path: str) -> None:
         "escape": '"',
     }
     if not os.path.exists(out_path):
-        spark.read.options(**csv_options).csv(in_path).write.parquet(out_path)
+        spark.read.options(**csv_options).csv(in_path).repartition(
+            REPARTITION_FACTOR
+        ).write.parquet(out_path)
 
 
 def get_opinions(spark: SparkSession, path: str) -> DataFrame:
