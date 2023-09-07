@@ -2,7 +2,7 @@ import os
 import sys
 
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import IntegerType, DateType
+from pyspark.sql.types import IntegerType, DateType, ArrayType, StringType, Row
 from pyspark.sql.functions import (
     coalesce,
     when,
@@ -119,6 +119,39 @@ def get_citations(spark: SparkSession, path: str) -> DataFrame:
         .withColumn("cluster_id", col("cluster_id").cast(IntegerType()))
         .withColumn("id", col("id").cast(IntegerType()))
         .drop(*drop_cols)
+    )
+
+
+def rdd_group(
+    citations: DataFrame, opinions: DataFrame, opinion_clusters: DataFrame
+) -> DataFrame:
+    citations_keyed = citations.rdd.map(lambda x: (x.cluster_id, x.citation_text))
+    opinions_keyed = opinions.rdd.map(lambda x: (x.cluster_id, x))
+
+    grouped = (
+        opinion_clusters.rdd.map(lambda x: (x.id, x))
+        .groupWith(opinions_keyed)
+        .groupWith(citations_keyed)
+    )
+
+    schema = opinion_clusters.schema
+    schema.add("opinions", ArrayType(opinions.schema))
+    schema.add("citations", ArrayType(StringType()))
+
+    def reparent_opinions(row):
+        pair = row[1]
+        cluster = list(list(pair[0])[0][0])[0]
+        opinions = list(list(pair[0])[0][1])
+        citations = list(pair[1])
+        dict = cluster.asDict()
+        dict["opinions"] = opinions
+        dict["citations"] = citations
+        return Row(**dict)
+
+    return (
+        grouped.map(lambda x: reparent_opinions(x))
+        .toDF(schema)
+        .drop("opinions.cluster_id")
     )
 
 
