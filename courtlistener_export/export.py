@@ -97,7 +97,7 @@ def get_opinion_clusters(spark: SparkSession, path: str) -> DataFrame:
         .withColumn("summary", regexp_replace("summary", r"<.+?>", ""))
         .withColumn("id", col("id").cast(IntegerType()))
         .withColumn("docket_id", col("docket_id").cast(IntegerType()))
-        .filter(col("blocked") == "t")
+        .filter(col("blocked") == "f")
         .drop(*drop_cols)
     )
 
