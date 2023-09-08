@@ -64,7 +64,7 @@ def get_opinions(spark: SparkSession, path: str) -> DataFrame:
         .withColumn("per_curiam", when(col("per_curiam") == "t", True).otherwise(False))
         .withColumn("cluster_id", col("cluster_id").cast(IntegerType()))
         .withColumn("author_id", col("author_id").cast(IntegerType()))
-        .withColumn("opinion_id", col("opinion_id").cast(IntegerType()))
+        .withColumn("opinion_id", col("id").cast(IntegerType()))
         .drop(*drop_cols)
     )
 
@@ -128,10 +128,8 @@ def rdd_group(
     citations_keyed = citations.rdd.map(lambda x: (x.cluster_id, x.citation_text))
     opinions_keyed = opinions.rdd.map(lambda x: (x.cluster_id, x))
 
-    grouped = (
-        opinion_clusters.rdd.map(lambda x: (x.id, x))
-        .groupWith(opinions_keyed)
-        .groupWith(citations_keyed)
+    grouped = opinion_clusters.rdd.map(lambda x: (x.id, x)).groupWith(
+        opinions_keyed, citations_keyed
     )
 
     schema = opinion_clusters.schema
@@ -139,17 +137,19 @@ def rdd_group(
     schema.add("citations", ArrayType(StringType()))
 
     def reparent_opinions(row):
-        pair = row[1]
-        cluster = list(list(pair[0])[0][0])[0]
-        opinions = list(list(pair[0])[0][1])
-        citations = list(pair[1])
+        key, values = row
+        if not list(values[0]):
+            return []  # this grouping had no cluster
+        cluster = list(values[0])[0]  # list(list(pair[0])[0][0])[0]
+        opinions = list(values[1])  # list(list(pair[0])[0][1])
+        citations = list(values[2])  # list(pair[1])
         dict = cluster.asDict()
         dict["opinions"] = opinions
         dict["citations"] = citations
-        return Row(**dict)
+        return [Row(**dict)]
 
     return (
-        grouped.map(lambda x: reparent_opinions(x))
+        grouped.flatMap(lambda x: reparent_opinions(x))
         .toDF(schema)
         .drop("opinions.cluster_id")
     )
@@ -217,7 +217,7 @@ def run(data_dir: str) -> None:
     opinions = get_opinions(spark, latest_opinions_parquet)
     opinion_clusters = get_opinion_clusters(spark, latest_clusters_parquet)
 
-    reparented = group(citations, opinions, opinion_clusters)
+    reparented = rdd_group(citations, opinions, opinion_clusters)
     reparented.write.parquet(data_dir + "/courtlistener.parquet")
 
     spark.stop()
