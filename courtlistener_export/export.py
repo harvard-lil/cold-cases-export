@@ -220,6 +220,10 @@ def run(data_dir: str) -> None:
     reparented = rdd_group(citations, opinions, opinion_clusters)
     reparented.write.parquet(data_dir + "/courtlistener.parquet")
 
+    spark.read.parquet(data_dir + "/courtlistener.parquet").write.json(
+        data_dir + "/courtlistener.jsonl"
+    )
+
     spark.stop()
 
 
