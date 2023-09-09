@@ -221,7 +221,7 @@ def run(data_dir: str) -> None:
     reparented.write.parquet(data_dir + "/courtlistener.parquet")
 
     spark.read.parquet(data_dir + "/courtlistener.parquet").write.json(
-        data_dir + "/courtlistener.jsonl"
+        data_dir + "/courtlistener.jsonl", compression="gzip"
     )
 
     spark.stop()
