@@ -13,7 +13,8 @@ from pyspark.sql.functions import (
     struct,
 )
 
-REPARTITION_FACTOR = 32  # will split data this many times for parallelism
+# will split parquet data this many times for parallelism. may no longer be needed.
+REPARTITION_FACTOR = 32
 
 
 def get_opinions(dataframe: DataFrame) -> DataFrame:
@@ -67,6 +68,9 @@ def get_opinion_clusters(dataframe: DataFrame) -> DataFrame:
         "source",
         "procedural_history",
         "blocked",
+        "docket_id",
+        "date_blocked",
+        "filepath_json_harvard",
     ]
     return (
         dataframe.alias("oc")
@@ -79,7 +83,7 @@ def get_opinion_clusters(dataframe: DataFrame) -> DataFrame:
         .withColumn("citation_count", col("citation_count").cast(IntegerType()))
         .withColumn("summary", regexp_replace("summary", r"<.+?>", ""))
         .withColumn("id", col("id").cast(IntegerType()))
-        .withColumn("docket_id", col("docket_id").cast(IntegerType()))
+        .withColumn("opinion_cluster_docket_id", col("docket_id").cast(IntegerType()))
         .filter(col("blocked") == "f")
         .drop(*drop_cols)
     )
@@ -106,16 +110,30 @@ def get_citations(dataframe: DataFrame) -> DataFrame:
 
 
 def get_dockets(dataframe: DataFrame) -> DataFrame:
+    """
+    Loads pertinent data from dockets. Only necessary to join court info.
+    """
     return (
         dataframe.alias("d")
-        .select("id", "case_name_sort", "case_name_full", "slug", "court_id")
-        .withColumn()
+        .select("id", "court_id")
+        .withColumn("id", col("id").cast(IntegerType()))
+        .withColumnRenamed("court_id", "docket_court_id")
     )
 
 
 def get_courts(dataframe: DataFrame) -> DataFrame:
-    #  Todo
-    return dataframe
+    """
+    Loads pertinent data from courts.
+    """
+    return (
+        dataframe.alias("ct")
+        .select("id", "short_name", "full_name", "jurisdiction")
+        .withColumnRenamed("short_name", "court_short_name")
+        .withColumnRenamed("full_name", "court_full_name")
+        .withColumnRenamed("jurisdiction", "court_jurisdiction")
+        .withColumn("court_id", col("id"))
+        .drop("id")
+    )
 
 
 def group(
@@ -126,38 +144,86 @@ def group(
     courts: DataFrame,
 ) -> DataFrame:
     """
-    This groups the three datasets by cluster id and then merges them using
-    reparent_opinions. There's a better way to do this in the pure dataframe
-    api, but I didn't get around to figuring it out.
+    This joins all the dataframes together by their various keys, and removes
+    columns we no longer need to see for cleanliness.
     """
 
-    dockets_and_courts = dockets.join(courts, dockets.court_id == courts.id, "left")
+    # gets court info ready to join into clusters via docket_id
+    dockets_and_courts = dockets.join(
+        courts, dockets.docket_court_id == courts.court_id, "left"
+    ).withColumnRenamed("id", "dockets_and_courts_id")
 
-    citations_arrays = citations.groupby(citations.citation_cluster_id).agg(
-        collect_list(struct(*[col(c).alias(c) for c in citations.columns]))
+    # rolls up citations into arrays to get ready for joining
+    citations_arrays = (
+        citations.groupby(citations.citation_cluster_id)
+        .agg(collect_list(citations.citation_text))
+        .alias("citations")
     )
 
-    opinions_arrays = opinions.groupby(opinions.opinion_cluster_id).agg(
-        collect_list(struct(*[col(c).alias(c) for c in opinions.columns]))
+    # columns from opinions we want to keep around post rollup
+    opinion_cols = [
+        opinions.author_str,
+        opinions.per_curiam,
+        opinions.type,
+        opinions.page_count,
+        opinions.download_url,
+        opinions.author_id,
+        opinions.opinion_text,
+        opinions.ocr,
+    ]
+
+    # rolls up opinions into an array of structs
+    opinions_arrays = (
+        opinions.groupby(opinions.opinion_cluster_id)
+        .agg(collect_list(struct(*opinion_cols)))
+        .alias("opinions")
     )
 
-    return (
-        opinion_clusters.join(
-            citations_arrays,
-            opinion_clusters.id == citations_arrays.citation_cluster_id,
-            "left",
-        )
-        .join(
-            opinions_arrays,
-            opinion_clusters.id == opinions_arrays.opinion_cluster_id,
-            "left",
-        )
-        .join(
-            dockets_and_courts,
-            dockets_and_courts.id == opinion_clusters.docket_id,
-            "left",
-        )
+    # joins citation array to clusters
+    joined_citations = opinion_clusters.join(
+        citations_arrays,
+        opinion_clusters.id == citations_arrays.citation_cluster_id,
+        "left",
     )
+
+    # renames the citation array column so it looks pretty
+    joined_citations = joined_citations.withColumnRenamed(
+        joined_citations.columns[-1], "citations"
+    )
+
+    # joins opinions arrays in
+    joined_opinions = joined_citations.join(
+        opinions_arrays,
+        opinion_clusters.id == opinions_arrays.opinion_cluster_id,
+        "left",
+    )
+
+    # renames the opinions array column so it looks pretty
+    joined_opinions = joined_opinions.withColumnRenamed(
+        joined_opinions.columns[-1], "opinions"
+    )
+
+    # joins in courts via dockets
+    joined_courts = joined_opinions.join(
+        dockets_and_courts,
+        dockets_and_courts.dockets_and_courts_id
+        == opinion_clusters.opinion_cluster_docket_id,
+        "left",
+    )
+
+    # cleans up key columns we no longer need to see
+    result = joined_courts.drop(
+        "id",
+        "opinion_cluster_id",
+        "citation_cluster_id",
+        "court_id",
+        "docket_court_id",
+        "dockets_and_courts_id",
+        "citation_cluster_id",
+        "opinion_cluster_docket_id",
+    )
+
+    return result
 
 
 def find_latest(directory: str, prefix: str, extension: str) -> str:
@@ -175,6 +241,13 @@ def find_latest(directory: str, prefix: str, extension: str) -> str:
 
 
 def parquetify(spark: SparkSession, data_dir: str, nickname: str) -> DataFrame:
+    """
+    Converts .csv.bz2 files to parquet for faster processing.
+    Unfortunately, since these csvs can have multiline values in them,
+    there's not currently a way to parallelize this, since rows can span
+    bz2 blocks.
+    TODO: parameterize multiLine since some csvs might not have escaped linebreaks?
+    """
     latest_csv = data_dir + "/" + find_latest(data_dir, nickname, ".csv.bz2")
     latest_parquet = latest_csv.replace(".csv.bz2", ".parquet")
     csv_options = {
@@ -208,7 +281,7 @@ def run(data_dir: str) -> None:
     courts = get_courts(parquetify(spark, data_dir, "courts"))
     dockets = get_dockets(parquetify(spark, data_dir, "dockets"))
 
-    reparented = group(citations, opinions, opinion_clusters, dockets, courts)
+    reparented = group(citations, opinions, opinion_clusters, dockets, courts).drop()
     reparented.explain(extended=True)
     reparented.write.parquet(data_dir + "/courtlistener.parquet")
 
