@@ -14,7 +14,7 @@ from pyspark.sql.functions import (
 )
 
 # will split parquet data this many times for parallelism. may no longer be needed.
-REPARTITION_FACTOR = 32
+OUTPUT_FILES = 32
 
 
 def get_opinions(dataframe: DataFrame) -> DataFrame:
@@ -257,9 +257,7 @@ def parquetify(spark: SparkSession, data_dir: str, nickname: str) -> DataFrame:
         "escape": '"',
     }
     if not os.path.exists(latest_parquet):
-        spark.read.options(**csv_options).csv(latest_csv).repartition(
-            REPARTITION_FACTOR
-        ).write.parquet(latest_parquet)
+        spark.read.options(**csv_options).csv(latest_csv).write.parquet(latest_parquet)
     return spark.read.parquet(latest_parquet)
 
 
@@ -283,10 +281,12 @@ def run(data_dir: str) -> None:
 
     reparented = group(citations, opinions, opinion_clusters, dockets, courts).drop()
     reparented.explain(extended=True)
-    reparented.write.parquet(data_dir + "/courtlistener.parquet")
+    reparented.coalesce(OUTPUT_FILES).write.parquet(
+        data_dir + "/cold.parquet", compression="gzip"
+    )
 
-    spark.read.parquet(data_dir + "/courtlistener.parquet").write.json(
-        data_dir + "/courtlistener.jsonl", compression="gzip"
+    spark.read.parquet(data_dir + "/cold.parquet").write.json(
+        data_dir + "/cold.jsonl", compression="gzip"
     )
 
     spark.stop()
