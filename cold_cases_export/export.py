@@ -246,7 +246,6 @@ def parquetify(spark: SparkSession, data_dir: str, nickname: str) -> DataFrame:
     Unfortunately, since these csvs can have multiline values in them,
     there's not currently a way to parallelize this, since rows can span
     bz2 blocks.
-    TODO: parameterize multiLine since some csvs might not have escaped linebreaks?
     """
     latest_csv = data_dir + "/" + find_latest(data_dir, nickname, ".csv.bz2")
     latest_parquet = latest_csv.replace(".csv.bz2", ".parquet")
