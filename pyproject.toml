@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "courtlistener-export"
+name = "cold-cases-export"
 version = "0.1.0"
 description = ""
 authors = ["Michael Della Bitta <mdellabitta@law.harvard.edu>"]
 readme = "README.md"
-packages = [{include = "courtlistener_export"}]
+packages = [{include = "cold_cases_export"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
