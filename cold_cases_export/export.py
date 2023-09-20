@@ -264,7 +264,7 @@ def parquetify(spark: SparkSession, data_dir: str, nickname: str) -> DataFrame:
 def run(data_dir: str) -> None:
     spark = (
         SparkSession.builder.config("spark.sql.autoBroadcastJoinThreshold", "0")
-        .appName("courtlistener-export")
+        .appName("cold-cases-export")
         .getOrCreate()
     )
 
