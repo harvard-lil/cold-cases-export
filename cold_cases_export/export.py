@@ -319,7 +319,7 @@ def run(data_dir: str) -> None:
         data_dir + "/cold.parquet", compression="gzip"
     )
 
-    spark.read.parquet(data_dir + "/cold.parquet").write.json(
+    spark.read.parquet(data_dir + "/cold.parquet").coalesce(OUTPUT_FILES).write.json(
         data_dir + "/cold.jsonl", compression="gzip"
     )
 
