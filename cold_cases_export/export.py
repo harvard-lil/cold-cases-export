@@ -21,6 +21,24 @@ def get_opinions(dataframe: DataFrame) -> DataFrame:
     """
     Loads opinions from parquet file and cleans up columns
     """
+    select_cols = [
+        "id",
+        "author_str",
+        "per_curiam",
+        "type",
+        "page_count",
+        "download_url",
+        "plain_text",
+        "html",
+        "html_lawbox",
+        "html_columbia",
+        "html_anon_2020",
+        "xml_harvard",
+        "html_with_citations",
+        "extracted_by_ocr",
+        "author_id",
+        "cluster_id",
+    ]
     text_col_priority = [
         "html_with_citations",
         "plain_text",
@@ -31,17 +49,12 @@ def get_opinions(dataframe: DataFrame) -> DataFrame:
         "html_anon_2020",
     ]
     drop_cols = [
-        "date_created",
-        "date_modified",
-        "joined_by_str",
-        "sha1",
-        "local_path",
         "extracted_by_ocr",
         "cluster_id",
     ]
     drop_cols.extend(text_col_priority)
     return (
-        dataframe.alias("o")
+        dataframe.alias("o").select(*select_cols)
         .withColumn("opinion_text", coalesce(*text_col_priority))
         .withColumn("opinion_text", regexp_replace("opinion_text", r"<.+?>", ""))
         .withColumn("page_count", col("page_count").cast(IntegerType()))
@@ -58,33 +71,49 @@ def get_opinion_clusters(dataframe: DataFrame) -> DataFrame:
     """
     Loads opinion-clusters from parquet file and cleans up columns
     """
-    drop_cols = [
-        "date_created",
-        "date_modified",
-        "scdb_id",
-        "scdb_decision_direction",
-        "scdb_votes_majority",
-        "scdb_votes_minority",
-        "source",
-        "procedural_history",
+    select_cols = [
+        "id",
+        "judges",
+        "date_filed",
+        "date_filed_is_approximate",
+        "slug",
+        "case_name_short",
+        "case_name",
+        "case_name_full",
+        "attorneys",
+        "nature_of_suit",
+        "posture",
+        "syllabus",
+        "headnotes",
+        "summary",
+        "disposition",
+        "history",
+        "other_dates",
+        "cross_reference",
+        "correction",
+        "citation_count",
+        "precedential_status",
         "blocked",
         "docket_id",
-        "date_blocked",
-        "filepath_json_harvard",
+        "arguments",
+        "headmatter"
+    ]
+    drop_cols = [
+        "blocked",
+        "docket_id"
     ]
     return (
-        dataframe.alias("oc")
+        dataframe.alias("oc").select(*select_cols)
+        .filter(col("blocked") == "f")
         .withColumn("date_filed", col("date_filed").cast(DateType()))
         .withColumn(
             "date_filed_is_approximate",
             when(col("date_filed_is_approximate") == "t", True).otherwise(False),
         )
-        .withColumn("date_blocked", col("date_blocked").cast(DateType()))
         .withColumn("citation_count", col("citation_count").cast(IntegerType()))
         .withColumn("summary", regexp_replace("summary", r"<.+?>", ""))
         .withColumn("id", col("id").cast(IntegerType()))
         .withColumn("opinion_cluster_docket_id", col("docket_id").cast(IntegerType()))
-        .filter(col("blocked") == "f")
         .drop(*drop_cols)
     )
 
@@ -93,15 +122,21 @@ def get_citations(dataframe: DataFrame) -> DataFrame:
     """
     Loads citations from parquet file and cleans up columns
     """
+    select_cols = [
+        "id",
+        "volume",
+        "reporter",
+        "page",
+        "cluster_id"
+    ]
     drop_cols = [
         "volume",
         "reporter",
         "page",
         "cluster_id",
-        "type",  # might be needed. no current lookup table provided.
     ]
     return (
-        dataframe.alias("c")
+        dataframe.alias("c").select(*select_cols)
         .withColumn("citation_text", concat_ws(" ", "volume", "reporter", "page"))
         .withColumn("citation_cluster_id", col("cluster_id").cast(IntegerType()))
         .withColumn("id", col("id").cast(IntegerType()))
