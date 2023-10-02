@@ -165,7 +165,7 @@ def get_courts(dataframe: DataFrame) -> DataFrame:
         .select("id", "short_name", "full_name", "jurisdiction")
         .withColumnRenamed("short_name", "court_short_name")
         .withColumnRenamed("full_name", "court_full_name")
-        .withColumnRenamed("jurisdiction", "court_jurisdiction")
+        .withColumnRenamed("jurisdiction", "court_type")
         .withColumn("court_id", col("id"))
         .drop("id")
     )
