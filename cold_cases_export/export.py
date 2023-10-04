@@ -54,7 +54,8 @@ def get_opinions(dataframe: DataFrame) -> DataFrame:
     ]
     drop_cols.extend(text_col_priority)
     return (
-        dataframe.alias("o").select(*select_cols)
+        dataframe.alias("o")
+        .select(*select_cols)
         .withColumn("opinion_text", coalesce(*text_col_priority))
         .withColumn("opinion_text", regexp_replace("opinion_text", r"<.+?>", ""))
         .withColumn("page_count", col("page_count").cast(IntegerType()))
@@ -96,14 +97,12 @@ def get_opinion_clusters(dataframe: DataFrame) -> DataFrame:
         "blocked",
         "docket_id",
         "arguments",
-        "headmatter"
+        "headmatter",
     ]
-    drop_cols = [
-        "blocked",
-        "docket_id"
-    ]
+    drop_cols = ["blocked", "docket_id"]
     return (
-        dataframe.alias("oc").select(*select_cols)
+        dataframe.alias("oc")
+        .select(*select_cols)
         .filter(col("blocked") == "f")
         .withColumn("date_filed", col("date_filed").cast(DateType()))
         .withColumn(
@@ -122,13 +121,7 @@ def get_citations(dataframe: DataFrame) -> DataFrame:
     """
     Loads citations from parquet file and cleans up columns
     """
-    select_cols = [
-        "id",
-        "volume",
-        "reporter",
-        "page",
-        "cluster_id"
-    ]
+    select_cols = ["id", "volume", "reporter", "page", "cluster_id"]
     drop_cols = [
         "volume",
         "reporter",
@@ -136,7 +129,8 @@ def get_citations(dataframe: DataFrame) -> DataFrame:
         "cluster_id",
     ]
     return (
-        dataframe.alias("c").select(*select_cols)
+        dataframe.alias("c")
+        .select(*select_cols)
         .withColumn("citation_text", concat_ws(" ", "volume", "reporter", "page"))
         .withColumn("citation_cluster_id", col("cluster_id").cast(IntegerType()))
         .withColumn("id", col("id").cast(IntegerType()))
@@ -165,9 +159,30 @@ def get_courts(dataframe: DataFrame) -> DataFrame:
         .select("id", "short_name", "full_name", "jurisdiction")
         .withColumnRenamed("short_name", "court_short_name")
         .withColumnRenamed("full_name", "court_full_name")
-        .withColumnRenamed("jurisdiction", "court_jurisdiction")
+        .withColumnRenamed("jurisdiction", "court_type")
         .withColumn("court_id", col("id"))
         .drop("id")
+    )
+
+
+def get_court_info(spark: SparkSession, data_dir: str) -> DataFrame:
+    """
+    Loads information from a bundled csv containing information about the jurisdiction of courts.
+    """
+    csv_options = {
+        "header": "true",
+        "multiLine": "true",
+        "quote": '"',
+        "escape": '"',
+    }
+
+    select_cols = ["court_full_name", "jurisdiction"]
+    return (
+        spark.read.options(**csv_options)
+        .csv(data_dir + "/court-info.csv")
+        .select(*select_cols)
+        .withColumnRenamed("court_full_name", "court_info_full_name")
+        .withColumnRenamed("jurisdiction", "court_jurisdiction")
     )
 
 
@@ -177,15 +192,20 @@ def group(
     opinion_clusters: DataFrame,
     dockets: DataFrame,
     courts: DataFrame,
+    court_info: DataFrame,
 ) -> DataFrame:
     """
     This joins all the dataframes together by their various keys, and removes
     columns we no longer need to see for cleanliness.
     """
 
+    court_and_info = courts.join(
+        court_info, court_info.court_info_full_name == courts.court_full_name
+    ).drop("court_info_full_name")
+
     # gets court info ready to join into clusters via docket_id
     dockets_and_courts = dockets.join(
-        courts, dockets.docket_court_id == courts.court_id, "left"
+        court_and_info, dockets.docket_court_id == courts.court_id, "left"
     ).withColumnRenamed("id", "dockets_and_courts_id")
 
     # rolls up citations into arrays to get ready for joining
@@ -312,8 +332,11 @@ def run(data_dir: str) -> None:
     )
     courts = get_courts(parquetify(spark, data_dir, "courts"))
     dockets = get_dockets(parquetify(spark, data_dir, "dockets"))
+    court_info = get_court_info(spark, data_dir)
 
-    reparented = group(citations, opinions, opinion_clusters, dockets, courts).drop()
+    reparented = group(
+        citations, opinions, opinion_clusters, dockets, courts, court_info
+    )
     reparented.explain(extended=True)
     reparented.coalesce(OUTPUT_FILES).write.parquet(
         data_dir + "/cold.parquet", compression="gzip"
