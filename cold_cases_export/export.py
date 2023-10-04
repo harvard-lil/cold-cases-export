@@ -225,6 +225,7 @@ def group(
         opinions.author_id,
         opinions.opinion_text,
         opinions.ocr,
+        opinions.opinion_id
     ]
 
     # rolls up opinions into an array of structs
@@ -268,7 +269,6 @@ def group(
 
     # cleans up key columns we no longer need to see
     result = joined_courts.drop(
-        "id",
         "opinion_cluster_id",
         "citation_cluster_id",
         "court_id",
