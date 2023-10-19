@@ -4,6 +4,8 @@ This codebase is used to create a ML-friendly dataset out of
 the [bulk data downloads](https://www.courtlistener.com/help/api/bulk-data/) available
 on [courtlistener.com](https://courtlistener.com), a website run by the [Free Law Project](https://free.law/).
 
+You can see a sample of the data in [JSON Lines](https://jsonlines.org/) format [here](https://raw.githubusercontent.com/harvard-lil/cold-cases-export/main/sample.jsonl).
+
 ## Running:
 
 - Install a relatively new python (Recommended: [pyenv](https://github.com/pyenv/pyenv)).
