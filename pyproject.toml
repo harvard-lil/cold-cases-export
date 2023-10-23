@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cold-cases-export"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Michael Della Bitta <mdellabitta@law.harvard.edu>"]
 readme = "README.md"
