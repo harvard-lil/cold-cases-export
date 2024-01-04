@@ -59,4 +59,4 @@ Additionally, you will need to have run the exporter process already, so `cold.p
   creates.
 - The interface that appears will allow you to query the data and see things like facet counts for specific field values
   and build charts and visualizations.
-- Hit `Control-C` `in the `docker compose` terminal to shut off the Elastic servers.
+- Hit `Control-C` in the `docker compose` terminal to shut off the Elastic servers.
