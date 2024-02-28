@@ -12,8 +12,7 @@ You can see a sample of the data in [JSON Lines](https://jsonlines.org/) format 
 - Run `pip install pipx`.
 - Run `pipx install poetry`.
 - In the project directory, run `poetry install`.
-- To obtain the latest data, run `poetry run python courtlistener_export/download.py`. This will download the latest
-  versions of each of the bzip2 files needed to compile the dataset to the `data/` subdirectory.
+- To obtain the latest data, run `poetry run python courtlistener_export/download.py`. This will download the latest versions of each of the bzip2 files needed to compile the dataset to the `data/` subdirectory. Courtlistener publishes their data usually a few days after the first of the month. You can track whether or not they've uploaded new data at https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/list.html?prefix=bulk-data/. Note that data is not necessarily released every month.
 - Install [sdkman](https://sdkman.io/).
 - Run `sdk install java 11.0.18-tem`.
 - Run `sdk install spark 3.4.0`
@@ -21,9 +20,7 @@ You can see a sample of the data in [JSON Lines](https://jsonlines.org/) format 
 
 ```spark-submit --driver-memory 30g --master "local[8]" cold_cases_export/export.py data```
 
-Note that the values for the number of cores in the `--master` and `--driver-memory` interact with one another and
-should be tuned to the system you run it on. These settings worked on a high-end Macbook Pro with an M2 Pro and 32 GB of
-RAM.
+Note that the values for the number of cores in the `--master` and `--driver-memory` interact with one another and should be tuned to the system you run it on. These settings worked on a high-end Macbook Pro with an M2 Pro and 32 GB of RAM.
 
 The export script will first convert the data to [Parquet](https://parquet.apache.org/) format if this is the first time
 processing it. Unfortunately, since the data is bzipped (slow to decompress) and this process cannot be parallelized
@@ -60,3 +57,18 @@ Additionally, you will need to have run the exporter process already, so `cold.p
 - The interface that appears will allow you to query the data and see things like facet counts for specific field values
   and build charts and visualizations.
 - Hit `Control-C` in the `docker compose` terminal to shut off the Elastic servers.
+
+## Uploading the data to Hugging Face
+
+- Datasets in Hugging Face are transmitted via [Git LFS](https://git-lfs.com/), which is a plugin for the `git` command line client. You can install it using the Getting Started instructions on Git LFS's home page.
+
+- Clone the existing dataset: ```git clone https://huggingface.co/datasets/harvard-lil/cold-cases```
+
+- We're going to create one commit that simultaneously deletes the old data and adds the new data. First, in the cold-cases directory, do a `git rm *.parquet`.
+
+- Copy or move the new parquet files into the repo directory. Take care to only move the actual parquet files, and not any signatures or metadata files aside from them.
+
+- `git add *.parquet` and `git commit -m $YYYY-MM`, where YYYY-MM corresponds to the year and month of the export that this data was built from.
+
+- `git push` to finalize the change.
+
