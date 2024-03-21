@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cold-cases-export"
-version = "0.1.1"
+version = "0.1.2"
 description = ""
 authors = ["Michael Della Bitta <mdellabitta@law.harvard.edu>"]
 readme = "README.md"
@@ -15,7 +15,7 @@ psutil = "^5.9.5"
 
 
 [tool.poetry.group.dev.dependencies]
-black = "^23.7.0"
+black = "^24.3.0"
 
 [build-system]
 requires = ["poetry-core"]
