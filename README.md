@@ -1,3 +1,7 @@
+**Please note**
+
+This repo is not under active development. We have released version 1 of the dataset it creates and may or may not later release a version 2. If you use it, you may want to ensure that dependencies are up to date. If you find it useful, we would [love to know](mailto:lil@law.harvard.edu)! You can also file an issue or a pull request, though we may not respond as promptly as we would for a codebase under active development.
+
 # COLD Cases Export
 
 This codebase is used to create a ML-friendly dataset out of
